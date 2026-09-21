@@ -321,6 +321,29 @@ impl<'repo> Commit<'repo> {
     }
 }
 
+pub struct Blob<'repo> {
+    pub(super) inner: git2::Blob<'repo>,
+}
+
+impl Blob<'_> {
+    /// Get the size of the blob in bytes.
+    pub fn size(&self) -> u64 {
+        self.inner.size().try_into().unwrap()
+    }
+
+    /// Get the content of the blob as a byte slice.
+    pub fn get_content(&self) -> &[u8] {
+        self.inner.content()
+    }
+
+    /// Determine if the blob is binary. Note that this looks only at the
+    /// content of the blob to determine if it's binary; attributes set in
+    /// `.gitattributes`, etc. are not checked.
+    pub fn is_binary(&self) -> bool {
+        self.inner.is_binary()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::Commit;
@@ -357,28 +380,5 @@ mod tests {
             );
         }
         Ok(())
-    }
-}
-
-pub struct Blob<'repo> {
-    pub(super) inner: git2::Blob<'repo>,
-}
-
-impl Blob<'_> {
-    /// Get the size of the blob in bytes.
-    pub fn size(&self) -> u64 {
-        self.inner.size().try_into().unwrap()
-    }
-
-    /// Get the content of the blob as a byte slice.
-    pub fn get_content(&self) -> &[u8] {
-        self.inner.content()
-    }
-
-    /// Determine if the blob is binary. Note that this looks only at the
-    /// content of the blob to determine if it's binary; attributes set in
-    /// `.gitattributes`, etc. are not checked.
-    pub fn is_binary(&self) -> bool {
-        self.inner.is_binary()
     }
 }
