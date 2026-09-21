@@ -145,13 +145,60 @@ fn test_github_forge_uses_commit_message_body_for_pull_request_body() -> eyre::R
               "closed": false,
               "isDraft": false,
               "title": "[1/1] Summarize bridge behavior",
-              "body": "**Stack:**\n\n* https://example.com/mock-github-username/mock-github-repo/pulls/1\n\n\n---\n\nExplain why the collision model has to change.\n\nInclude the follow-up notes.\n\n"
+              "body": "**Stack:**\n\n* https://example.com/mock-github-username/mock-github-repo/pulls/1\n\n\n---\n\nExplain why the collision model has to change.\n\nInclude the follow-up notes.\n"
             }
           }
         }
         "###);
     }
 
+    Ok(())
+}
+
+#[test]
+fn test_github_forge_renders_non_utf8_commit_body() -> eyre::Result<()> {
+    let GitWrapperWithRemoteRepo {
+        temp_dir: _temp_dir,
+        original_repo: remote_repo,
+        cloned_repo: local_repo,
+    } = make_git_with_remote_repo()?;
+    if remote_repo.get_version()? < MIN_VERSION {
+        return Ok(());
+    }
+    remote_repo.init_repo()?;
+    remote_repo.clone_repo_into(&local_repo, &[])?;
+    local_repo.detach_head()?;
+    local_repo.write_file_txt("test1", "test1 contents\n")?;
+    local_repo.run(&["add", "."])?;
+    let message_path = local_repo.repo_path.join(".git/commit-message");
+    fs::write(&message_path, b"Preserve message\n\nBody with byte: \xff\n")?;
+    local_repo.run(&[
+        "-c",
+        "i18n.commitEncoding=ISO-8859-1",
+        "commit",
+        "--cleanup=verbatim",
+        "--file",
+        message_path.to_str().unwrap(),
+    ])?;
+    local_repo.branchless_with_options(
+        "submit",
+        &["--create", "--forge", "github"],
+        &GitRunOptions {
+            env: mock_env(&remote_repo),
+            ..Default::default()
+        },
+    )?;
+    let client = MockGithubClient {
+        remote_repo_path: remote_repo.repo_path.clone(),
+    };
+    let state: serde_json::Value = serde_json::from_slice(&fs::read(client.state_path())?)?;
+    let body = state["pull_requests"]["mock-github-username/preserve-message"]["body"]
+        .as_str()
+        .unwrap();
+    assert_eq!(
+        body,
+        "**Stack:**\n\n* https://example.com/mock-github-username/mock-github-repo/pulls/1\n\n\n---\n\nBody with byte: \u{fffd}\n"
+    );
     Ok(())
 }
 

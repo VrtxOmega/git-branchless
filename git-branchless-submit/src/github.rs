@@ -18,7 +18,6 @@ use lib::core::eventlog::EventLogDb;
 use lib::core::repo_ext::RepoExt;
 use lib::core::repo_ext::RepoReferencesSnapshot;
 use lib::git::CategorizedReferenceName;
-use lib::git::Commit;
 use lib::git::GitErrorCode;
 use lib::git::GitRunInfo;
 use lib::git::RepoError;
@@ -57,14 +56,6 @@ fn commit_summary_slug(summary: &str) -> String {
     } else {
         summary_slug.to_owned()
     }
-}
-
-fn get_commit_message_body(commit: &Commit<'_>) -> String {
-    let mut body = commit.get_body().unwrap_or_default().to_owned();
-    if !body.is_empty() && !body.ends_with('\n') {
-        body.push('\n');
-    }
-    body
 }
 
 fn singleton<K: Debug + Eq + Hash, V: Clone>(
@@ -354,7 +345,7 @@ impl Forge for GithubForge<'_> {
 
             let commit = self.repo.find_commit_or_fail(commit_oid)?;
             let title = String::from_utf8_lossy(&commit.get_summary()?).into_owned();
-            let body = get_commit_message_body(&commit);
+            let body = String::from_utf8_lossy(&commit.get_body().unwrap_or_default()).into_owned();
             try_exit_code!(self.client.create_pull_request(
                 effects,
                 client::CreatePullRequestArgs {
@@ -660,7 +651,8 @@ impl GithubForge<'_> {
         let commit_summary = commit.get_summary()?;
         let commit_summary = String::from_utf8_lossy(&commit_summary).into_owned();
         let title = format!("[{stack_index}/{stack_size}] {commit_summary}");
-        let commit_message_body = get_commit_message_body(&commit);
+        let commit_message_body =
+            String::from_utf8_lossy(&commit.get_body().unwrap_or_default()).into_owned();
         let body = if commit_message_body.is_empty() {
             format!(
                 "\
